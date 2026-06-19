@@ -946,9 +946,160 @@
       /* Toggle */
       .mode-switch { right: 16px; top: 16px; }
     }
+    /* ── Intro video modal ── */
+    .intro-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100000;
+      background: rgba(8,8,8,0.72);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 1;
+      transition: opacity 0.8s ease;
+    }
+    .intro-overlay.hidden { opacity: 0; pointer-events: none; }
+    .intro-overlay.removed { display: none; }
+
+    /* The VIDEO carries the size (800x445). The container has no size of
+       its own, so it shrink-wraps to exactly the video — no extra space. */
+    .intro-modal {
+      position: relative;
+      line-height: 0;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+      animation: introPop 0.5s cubic-bezier(0.22,1,0.36,1) both;
+    }
+    @keyframes introPop {
+      from { opacity: 0; transform: scale(0.96); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+
+    /* 800 wide, aspect ratio locked -> 445 tall. Shrinks on tiny screens. */
+    #introVideo {
+      display: block;
+      width: min(800px, 92vw);
+      aspect-ratio: 2560 / 1424;
+      height: auto;
+    }
+
+    .intro-btn {
+      position: absolute;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'Space Mono', monospace;
+      font-size: 13px;
+      letter-spacing: 0.04em;
+      color: #fff;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 999px;
+      padding: 10px 16px;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      transition: background 0.2s ease, border-color 0.2s ease, opacity 0.3s ease;
+    }
+    .intro-btn:hover { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.5); }
+
+    .intro-close {
+      top: 14px;
+      right: 14px;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      justify-content: center;
+      font-size: 18px;
+    }
+    .intro-sound {
+      bottom: 14px;
+      left: 14px;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    @media (max-width: 600px) {
+      .intro-close { top: 10px; right: 10px; width: 36px; height: 36px; }
+      .intro-sound { bottom: 10px; left: 10px; width: 36px; height: 36px; }
+    }
   </style>
 </head>
 <body>
+  <!-- ── Intro video modal ── -->
+  <div class="intro-overlay" id="introOverlay">
+    <div class="intro-modal">
+      <video id="introVideo" playsinline preload="auto">
+        <source src="Vibe_coding_learning.mp4" type="video/mp4">
+      </video>
+      <button class="intro-btn intro-close" id="introClose" aria-label="Skip intro">&times;</button>
+      <button class="intro-btn intro-sound" id="introSound" aria-label="Toggle sound"></button>
+    </div>
+  </div>
+  <script>
+    (function introModal() {
+      const overlay = document.getElementById('introOverlay');
+      const video   = document.getElementById('introVideo');
+      const closeBtn = document.getElementById('introClose');
+      const soundBtn = document.getElementById('introSound');
+
+      // Show only once per browser session.
+      if (sessionStorage.getItem('introSeen')) {
+        overlay.classList.add('removed');
+        return;
+      }
+
+      let dismissed = false;
+      function dismiss() {
+        if (dismissed) return;
+        dismissed = true;
+        sessionStorage.setItem('introSeen', '1');
+        try { video.pause(); } catch (e) {}
+        overlay.classList.add('hidden');
+        overlay.addEventListener('transitionend', () => overlay.classList.add('removed'), { once: true });
+      }
+
+      // Material Symbols: volume_up (on) / volume_off (muted)
+      const ICON_ON  = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>';
+      const ICON_OFF = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>';
+      function syncSoundIcon() {
+        soundBtn.innerHTML = video.muted ? ICON_OFF : ICON_ON;
+      }
+
+      // Default: sound ON. Browsers may block autoplay-with-sound on the
+      // first visit — if so, start muted and unmute on the first interaction.
+      video.muted = false;
+      video.volume = 1;
+      const attempt = video.play();
+      if (attempt && attempt.catch) {
+        attempt.catch(() => {
+          video.muted = true;
+          syncSoundIcon();
+          video.play().catch(() => {});
+          const autoUnmute = () => { video.muted = false; video.volume = 1; syncSoundIcon(); };
+          window.addEventListener('pointerdown', autoUnmute, { once: true });
+          window.addEventListener('keydown', autoUnmute, { once: true });
+        });
+      }
+      syncSoundIcon();
+
+      // User can turn audio off (or back on) anytime.
+      soundBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        video.muted = !video.muted;
+        if (!video.muted) video.volume = 1;
+        syncSoundIcon();
+      });
+      closeBtn.addEventListener('click', dismiss);
+      video.addEventListener('ended', dismiss);
+    })();
+  </script>
   <div class="mode-switch" id="modeToggleFixed">
     <div class="switch-knob">
       <svg viewBox="0 0 24 24" width="12" height="12" class="knob-sun">
